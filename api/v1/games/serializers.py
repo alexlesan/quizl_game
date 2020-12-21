@@ -13,7 +13,7 @@ class GameSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Game
-        fields = ('title', 'created_by', 'is_active')
+        fields = ('id', 'title', 'created_by', 'is_active')
 
 
 class QuestionSerializer(serializers.ModelSerializer):
