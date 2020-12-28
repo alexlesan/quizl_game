@@ -46,7 +46,7 @@ class CustomAccountManager(BaseUserManager):
 class Account(AbstractUser):
     email = models.EmailField(verbose_name="Email", max_length=60, unique=True)
     username = models.CharField(max_length=20, unique=True)
-    verification_code = models.IntegerField(blank=True, null=True, default=0)
+    points = models.IntegerField(default=0)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
@@ -66,6 +66,14 @@ class Account(AbstractUser):
 
     def has_module_perms(self, app_label):
         return True
+
+    def total_games(self):
+        return self.question_set.all().select_related()
+
+    @property
+    def rank(self):
+        total_games = self.total_games().count()
+        return float(self.points / total_games)
 
     def tokens(self):
         refresh = RefreshToken.for_user(self)

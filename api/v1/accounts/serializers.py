@@ -91,3 +91,15 @@ class EmailVerificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = ['token']
+
+
+class AccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Account
+        fields = ('id', 'email', 'username', 'is_active', 'is_staff', 'is_superuser')
+
+
+class AccountInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Account
+        fields = ('id', 'email', 'username', 'is_active', 'rank')

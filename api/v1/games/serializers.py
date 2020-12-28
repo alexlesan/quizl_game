@@ -1,6 +1,6 @@
-from rest_framework import serializers, status
+from rest_framework import serializers
 
-from api.v1.games.models import (Game, Question, Answer)
+from api.v1.games.models import (Game, Question, Answer, GameQuestions, GameResults)
 
 
 class GameSerializer(serializers.ModelSerializer):
@@ -13,7 +13,20 @@ class GameSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Game
-        fields = ('id', 'title', 'created_by', 'is_active')
+        fields = ('id', 'title', 'created_by', 'is_active', 'questions')
+
+
+class GameSetUpSerializer(serializers.ModelSerializer):
+    """
+    Serializer class used to display game with relation between questions and answers
+    """
+    game = serializers.PrimaryKeyRelatedField(queryset=Game.objects.all())
+    question = serializers.PrimaryKeyRelatedField(queryset=Question.objects.all())
+    created_by = serializers.HiddenField(default=serializers.CurrentUserDefault())
+
+    class Meta:
+        model = GameQuestions
+        fields = ('id', 'game', 'question', 'created_by')
 
 
 class QuestionSerializer(serializers.ModelSerializer):
@@ -23,17 +36,10 @@ class QuestionSerializer(serializers.ModelSerializer):
     title = serializers.CharField()
     created_by = serializers.HiddenField(default=serializers.CurrentUserDefault())
     points = serializers.IntegerField()
-    answers = serializers.SerializerMethodField()
-
-    def get_answers(self, obj):
-        try:
-            return Answer.objects.filter(question=obj)
-        except Answer.DoesNotExist:
-            return []
 
     class Meta:
         model = Question
-        fields = ('title', 'points', 'created_by', 'answers')
+        fields = ('id', 'title', 'points', 'created_by', 'answers')
 
 
 class AnswerSerializer(serializers.ModelSerializer):
@@ -42,15 +48,40 @@ class AnswerSerializer(serializers.ModelSerializer):
     """
     answer = serializers.CharField()
     is_correct = serializers.BooleanField()
-    question = serializers.SerializerMethodField()
+    question = serializers.PrimaryKeyRelatedField(queryset=Question.objects.all())
     created_by = serializers.HiddenField(default=serializers.CurrentUserDefault())
-
-    def get_question(self, obj):
-        try:
-            return Question.objects.filter(pk=obj.question_id)
-        except Question.DoesNotExist:
-            return []
 
     class Meta:
         model = Answer
         fields = ('question', 'answer', 'is_correct', 'created_by')
+
+
+class GamePlaySerializer(serializers.ModelSerializer):
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    game = serializers.PrimaryKeyRelatedField(queryset=Game.objects.all())
+    question = serializers.PrimaryKeyRelatedField(queryset=Question.objects.all())
+    answer = serializers.PrimaryKeyRelatedField(queryset=Answer.objects.all())
+    points = serializers.IntegerField()
+
+    class Meta:
+        model = GameResults
+        fields = '__all__'
+
+    def create(self, validated_data):
+        question = validated_data['question']
+        answer = validated_data['answer']
+        account = self.context['request'].user
+        points_earn = question.points if answer.is_correct else 0
+
+        GameResults.objects.create(
+            question=question,
+            answer=answer,
+            game=validated_data['game'],
+            user=account,
+            points=points_earn
+        )
+
+        if answer.is_correct:
+            account.points += points_earn
+            account.save()
+        return validated_data

@@ -22,6 +22,25 @@ class Game(GameBaseModel):
     def __str__(self):
         return self.title
 
+    def questions(self):
+        q = self.gamequestions_set.all().values(
+            'question_id',
+            'question__title',
+            'question__points'
+        )
+        res = []
+
+        for question in q:
+            res_question = {
+                "id": question['question_id'],
+                "question": question['question__title'],
+                "points": question['question__points'],
+                "answers": Answer.objects.filter(question_id=question['question_id']).values('id', 'answer')
+            }
+            res.append(res_question)
+
+        return res
+
     class Meta:
         db_table = 'games'
         ordering = ['-created_at']
@@ -37,6 +56,10 @@ class Question(GameBaseModel):
 
     def __str__(self):
         return self.title
+
+    @property
+    def answers(self):
+        return self.answer_set.all().values('id', 'answer', 'is_correct')
 
     class Meta:
         db_table = 'questions'
@@ -74,7 +97,10 @@ class GameResults(models.Model):
 
     """
     user = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="player")
-    game = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="game_played")
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="game_played")
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="question_played")
+    answer = models.ForeignKey(Answer, on_delete=models.CASCADE, related_name="answer_played")
+    points = models.IntegerField(default=0)
     played_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

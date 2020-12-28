@@ -1,20 +1,19 @@
-from pprint import pprint
-
 import jwt
 from django.conf import settings
+from django.contrib.auth.decorators import permission_required
 from django.contrib.sites.shortcuts import get_current_site
-from django.shortcuts import render
 from django.urls import reverse
-from rest_framework import status, permissions
+from rest_framework import status, permissions, mixins
+from rest_framework.decorators import permission_classes
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from api.v1.accounts.models import Account
-from api.v1.accounts.permission import IsGuest
+from api.v1.accounts.permission import IsGuest, IsSuperUser, IsOwnerUser
 from api.v1.accounts.serializers import LoginSerializer, LogoutSerializer, RegisterSerializer, \
-    EmailVerificationSerializer
+    EmailVerificationSerializer, AccountSerializer, AccountInfoSerializer
 from api.v1.accounts.utils import SendUserEmail
 
 
@@ -66,7 +65,7 @@ class RegisterAPI(APIView):
                 "activate_url": activate_url
             }
             SendUserEmail.send_registration_email(email_data)
-            return Response({"data": serializer.data, "token":account.tokens()}, status=status.HTTP_201_CREATED)
+            return Response({"data": serializer.data, "token": account.tokens()}, status=status.HTTP_201_CREATED)
         else:
             return Response({"data": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -81,7 +80,7 @@ class VerifyEmailAPI(APIView):
         try:
             payload = jwt.decode(token, settings.SECRET_KEY)
             user = Account.objects.get(id=payload['user_id'])
-            if not user.is_verified:
+            if not user.is_active:
                 user.is_active = True
                 user.save()
             return Response({
@@ -92,3 +91,57 @@ class VerifyEmailAPI(APIView):
             return Response({'data': [], 'msg': 'Activation Expired'}, status=status.HTTP_400_BAD_REQUEST)
         except jwt.exceptions.DecodeError as identifier:
             return Response({'data': [], 'msg': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AccountsApiView(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    GenericAPIView
+):
+    """
+    Class used by admin to list and create users
+    """
+    serializer_class = RegisterSerializer
+    queryset = Account.objects.all()
+    permission_classes = (IsSuperUser,)
+
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
+
+
+class AccountApiDetail(mixins.RetrieveModelMixin,
+                       mixins.UpdateModelMixin,
+                       mixins.DestroyModelMixin,
+                       GenericAPIView):
+    """
+    Class used to get/update and delete user
+    """
+    queryset = Account.objects.all()
+    serializer_class = AccountSerializer
+
+    @permission_classes((permissions.IsAuthenticated,))
+    def get(self, request, *args, **kwargs):
+        return self.retrieve(request, *args, **kwargs)
+
+    @permission_classes([IsSuperUser])
+    def put(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
+    @permission_classes([IsSuperUser])
+    def delete(self, request, *args, **kwargs):
+        return self.destroy(request, *args, **kwargs)
+
+
+class AccountApiInfo(mixins.RetrieveModelMixin, GenericAPIView):
+    """
+    Class used to get user personal info
+    """
+    queryset = Account.objects.all()
+    serializer_class = AccountInfoSerializer
+    permission_classes = (IsOwnerUser,)
+
+    def get(self, request, *args, **kwargs):
+        return self.retrieve(request, *args, **kwargs)
